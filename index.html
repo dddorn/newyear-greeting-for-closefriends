@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<title>🎉 สุขสันต์วันปีใหม่ 🎉</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<!-- Canvas สำหรับ confetti -->
+<canvas id="confettiCanvas" style="position:fixed;pointer-events:none;top:0;left:0;width:100%;height:100%;z-index:9999;"></canvas>
+
+<style>
+body {
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  background: linear-gradient(135deg, #ffecd2, #fcb69f);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.card {
+  background: white;
+  padding: 30px;
+  border-radius: 16px;
+  width: 350px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.15);
+}
+
+h2 { text-align: center; margin-bottom: 20px; }
+input, button {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+}
+
+button {
+  background: #ff7a18;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  border: none;
+}
+
+button:hover { background: #ff9f4a; }
+
+/* Modal */
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 10000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgba(255,255,255,0.8);
+  backdrop-filter: blur(5px);
+}
+
+.modal-content {
+  background: linear-gradient(135deg, #ffe6f0, #fff6d1);
+  margin: 15% auto;
+  padding: 25px 35px;
+  border-radius: 20px;
+  width: 90%;
+  max-width: 400px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0,0,0,.3);
+  position: relative;
+}
+
+.close {
+  color: #ff4d6d;
+  float: right;
+  font-size: 28px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.close:hover { color: #ff1a3c; }
+
+#modalMessage {
+  font-size: 18px;
+  margin-top: 15px;
+}
+
+/* Emoji styling */
+.emoji {
+  font-size: 24px;
+  margin: 5px;
+  display: inline-block;
+  animation: bounce 1s infinite alternate;
+}
+
+@keyframes bounce {
+  from { transform: translateY(0); }
+  to { transform: translateY(-8px); }
+}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h2>🎆 สุขสันต์วันปีใหม่ 🎆</h2>
+  <input id="name" placeholder="Instagram username" />
+  <input id="birthday" placeholder="MM-DD" />
+  <input id="code" placeholder="Secret Code ทักมาขอจิจิจิ ถ้าอยากได้คำอวยพรน่ะ" />
+  <button onclick="openGreeting()">เปิดคำอวยพร</button>
+</div>
+
+<!-- Modal -->
+<div id="greetingModal" class="modal">
+  <div class="modal-content">
+    <span class="close">&times;</span>
+    <h2 id="modalTitle"></h2>
+    <p id="modalMessage"></p>
+  </div>
+</div>
+
+<script>
+// Firebase config
+const firebaseConfig = {
+  apiKey: "AIzaSyBvit-29FTkXcyloz2Fe1Bs8tAqYH67rIo",
+  authDomain: "newyear-greeting.firebaseapp.com",
+  projectId: "newyear-greeting",
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// Open greeting
+async function openGreeting() {
+  const name = document.getElementById("name").value.trim();
+  const birthday = document.getElementById("birthday").value.trim();
+  const code = document.getElementById("code").value.trim();
+
+  if (!name || !birthday || !code) {
+    showModal("⚠️ ข้อมูลไม่ครบ", "กรุณากรอกชื่อ IG วันเกิดและรหัสลับให้ครบ", false);
+    return;
+  }
+
+  const snap = await db.collection("friends")
+    .where("name", "==", name)
+    .where("birthday", "==", birthday)
+    .where("secretCode", "==", code)
+    .get();
+
+  if (snap.empty) {
+    showModal("❌ ไม่พบข้อมูล", "ลองตรวจสอบชื่อ IG วันเกิด และรหัสลับอีกครั้ง", false);
+    return;
+  }
+
+  const friend = snap.docs[0].data();
+  showModal(`ถึง @${friend.name} 💌`, friend.message, true);
+
+  // Log
+  db.collection("logs").add({
+    name: friend.name,
+    openedAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+// Show modal with optional confetti
+function showModal(title, message, confetti = true) {
+  const modal = document.getElementById("greetingModal");
+  const modalTitle = document.getElementById("modalTitle");
+  const modalMessage = document.getElementById("modalMessage");
+  const closeBtn = modal.querySelector(".close");
+
+  modalTitle.innerHTML = title + ' <span class="emoji">🎉✨💖</span>';
+  modalMessage.innerHTML = message;
+
+  modal.style.display = "block";
+
+  if (confetti) startConfetti();
+
+  closeBtn.onclick = () => { modal.style.display = "none"; stopConfetti(); };
+  window.onclick = (e) => { if (e.target == modal) { modal.style.display = "none"; stopConfetti(); } };
+}
+
+/* ======= Confetti ======= */
+const confettiCanvas = document.getElementById("confettiCanvas");
+const ctx = confettiCanvas.getContext("2d");
+let confettiParticles = [];
+let confettiAnimation;
+
+function resizeCanvas() {
+  confettiCanvas.width = window.innerWidth;
+  confettiCanvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+function startConfetti() {
+  confettiParticles = [];
+  for (let i=0; i<150; i++) {
+    confettiParticles.push({
+      x: Math.random()*confettiCanvas.width,
+      y: Math.random()*confettiCanvas.height - confettiCanvas.height,
+      r: Math.random()*6+4,
+      d: Math.random()*20+10,
+      color: `hsl(${Math.random()*360}, 100%, 50%)`,
+      tilt: Math.random()*10-10,
+      tiltAngleIncrement: Math.random()*0.07+0.05
+    });
+  }
+  animateConfetti();
+}
+
+function animateConfetti() {
+  ctx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height);
+  for (let i=0; i<confettiParticles.length; i++) {
+    let p = confettiParticles[i];
+    p.tiltAngle += p.tiltAngleIncrement;
+    p.y += (Math.cos(p.d) + 3 + p.r/2)/2;
+    p.tilt = Math.sin(p.tiltAngle) * 15;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.moveTo(p.x + p.tilt + p.r/2, p.y);
+    ctx.lineTo(p.x + p.tilt, p.y + p.r);
+    ctx.lineTo(p.x + p.tilt - p.r/2, p.y);
+    ctx.closePath();
+    ctx.fill();
+
+    if (p.y > confettiCanvas.height) {
+      p.y = -10;
+      p.x = Math.random()*confettiCanvas.width;
+    }
+  }
+  confettiAnimation = requestAnimationFrame(animateConfetti);
+}
+
+function stopConfetti() {
+  cancelAnimationFrame(confettiAnimation);
+  ctx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height);
+}
+</script>
+</body>
+</html>
