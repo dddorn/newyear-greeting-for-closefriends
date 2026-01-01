@@ -156,10 +156,41 @@ async function openGreeting() {
   showModal(`ถึง @${friend.name} 💌`, friend.message, true);
 
   // Log
-  db.collection("logs").add({
-    name: friend.name,
-    openedAt: firebase.firestore.FieldValue.serverTimestamp()
-  });
+// success
+db.collection("logs").add({
+  event: "open_greeting",
+  input: {
+    name: name,
+    birthday: birthday,
+    code: code
+  },
+  result: "success",
+  target: friend.name,
+  device: {
+    userAgent: navigator.userAgent,
+    language: navigator.language,
+    screen: `${screen.width}x${screen.height}`
+  },
+  createdAt: firebase.firestore.FieldValue.serverTimestamp()
+});
+
+db.collection("logs").add({
+  event: "open_greeting",
+  input: {
+    name,
+    birthday,
+    code
+  },
+  result: "fail",
+  reason: "not_found",
+  device: {
+    userAgent: navigator.userAgent,
+    language: navigator.language,
+    screen: `${screen.width}x${screen.height}`
+  },
+  createdAt: firebase.firestore.FieldValue.serverTimestamp()
+});
+
 }
 
 // Show modal with optional confetti
@@ -239,5 +270,4 @@ function stopConfetti() {
 </script>
 </body>
 </html>
-
 
